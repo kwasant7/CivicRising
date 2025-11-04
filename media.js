@@ -1,13 +1,24 @@
 // Media Management System for Photos, Videos, and Presentations
-// Uses localStorage to persist media data
+// Uses Firebase Firestore to persist media data
 
 class MediaManager {
     constructor() {
-        this.photos = this.loadMedia('civicPhotos');
-        this.videos = this.loadMedia('civicVideos');
-        this.presentations = this.loadMedia('civicPresentations');
+        this.photos = [];
+        this.videos = [];
+        this.presentations = [];
         this.currentEditId = null;
         this.currentMediaType = null;
+
+        // Firestore collections
+        this.photosCollection = db.collection('photos');
+        this.videosCollection = db.collection('videos');
+        this.presentationsCollection = db.collection('presentations');
+
+        // Unsubscribe functions for real-time listeners
+        this.unsubscribePhotos = null;
+        this.unsubscribeVideos = null;
+        this.unsubscribePresentations = null;
+
         this.init();
     }
 
@@ -44,23 +55,58 @@ class MediaManager {
         });
         this.mediaForm.addEventListener('submit', (e) => this.handleSubmit(e));
 
-        // Initial render
-        this.renderPhotos();
-        this.renderVideos();
-        this.renderPresentations();
+        // Load media from Firestore with real-time listeners
+        this.loadPhotos();
+        this.loadVideos();
+        this.loadPresentations();
     }
 
-    // Load media from localStorage
-    loadMedia(key) {
-        const stored = localStorage.getItem(key);
-        return stored ? JSON.parse(stored) : [];
+    // Load photos from Firestore with real-time listener
+    loadPhotos() {
+        this.unsubscribePhotos = this.photosCollection.onSnapshot((snapshot) => {
+            this.photos = [];
+            snapshot.forEach((doc) => {
+                this.photos.push({
+                    docId: doc.id,
+                    ...doc.data()
+                });
+            });
+            this.renderPhotos();
+        }, (error) => {
+            console.error('Error loading photos:', error);
+        });
     }
 
-    // Save media to localStorage
-    saveMedia(type, data) {
-        const key = type === 'photo' ? 'civicPhotos' :
-                    type === 'video' ? 'civicVideos' : 'civicPresentations';
-        localStorage.setItem(key, JSON.stringify(data));
+    // Load videos from Firestore with real-time listener
+    loadVideos() {
+        this.unsubscribeVideos = this.videosCollection.onSnapshot((snapshot) => {
+            this.videos = [];
+            snapshot.forEach((doc) => {
+                this.videos.push({
+                    docId: doc.id,
+                    ...doc.data()
+                });
+            });
+            this.renderVideos();
+        }, (error) => {
+            console.error('Error loading videos:', error);
+        });
+    }
+
+    // Load presentations from Firestore with real-time listener
+    loadPresentations() {
+        this.unsubscribePresentations = this.presentationsCollection.onSnapshot((snapshot) => {
+            this.presentations = [];
+            snapshot.forEach((doc) => {
+                this.presentations.push({
+                    docId: doc.id,
+                    ...doc.data()
+                });
+            });
+            this.renderPresentations();
+        }, (error) => {
+            console.error('Error loading presentations:', error);
+        });
     }
 
     // Render Photos
@@ -178,7 +224,7 @@ class MediaManager {
     attachMediaEventListeners() {
         document.querySelectorAll('.btn-edit-media').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const id = parseInt(e.target.dataset.id);
+                const id = e.target.dataset.id;
                 const type = e.target.dataset.type;
                 this.openEditModal(id, type);
             });
@@ -186,7 +232,7 @@ class MediaManager {
 
         document.querySelectorAll('.btn-delete-media').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const id = parseInt(e.target.dataset.id);
+                const id = e.target.dataset.id;
                 const type = e.target.dataset.type;
                 this.deleteMedia(id, type);
             });
@@ -271,84 +317,100 @@ class MediaManager {
     }
 
     // Handle form submission
-    handleSubmit(e) {
+    async handleSubmit(e) {
         e.preventDefault();
 
-        if (this.currentMediaType === 'photo') {
-            const photoData = {
-                id: this.currentEditId || Date.now(),
-                url: document.getElementById('photoUrl').value,
-                caption: document.getElementById('photoCaption').value
-            };
+        try {
+            if (this.currentMediaType === 'photo') {
+                const photoData = {
+                    id: this.currentEditId || Date.now().toString(),
+                    url: document.getElementById('photoUrl').value,
+                    caption: document.getElementById('photoCaption').value,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
 
-            if (this.currentEditId) {
-                const index = this.photos.findIndex(p => p.id === this.currentEditId);
-                if (index !== -1) this.photos[index] = photoData;
-            } else {
-                this.photos.push(photoData);
+                if (this.currentEditId) {
+                    const photo = this.photos.find(p => p.id === this.currentEditId);
+                    if (photo && photo.docId) {
+                        await this.photosCollection.doc(photo.docId).update(photoData);
+                    }
+                } else {
+                    photoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    await this.photosCollection.doc(photoData.id).set(photoData);
+                }
+
+            } else if (this.currentMediaType === 'video') {
+                const videoData = {
+                    id: this.currentEditId || Date.now().toString(),
+                    url: document.getElementById('videoUrl').value,
+                    title: document.getElementById('videoTitle').value,
+                    description: document.getElementById('videoDescription').value,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                if (this.currentEditId) {
+                    const video = this.videos.find(v => v.id === this.currentEditId);
+                    if (video && video.docId) {
+                        await this.videosCollection.doc(video.docId).update(videoData);
+                    }
+                } else {
+                    videoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    await this.videosCollection.doc(videoData.id).set(videoData);
+                }
+
+            } else if (this.currentMediaType === 'presentation') {
+                const presData = {
+                    id: this.currentEditId || Date.now().toString(),
+                    url: document.getElementById('presentationUrl').value,
+                    title: document.getElementById('presentationTitle').value,
+                    description: document.getElementById('presentationDescription').value,
+                    date: document.getElementById('presentationDate').value,
+                    format: document.getElementById('presentationFormat').value,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                if (this.currentEditId) {
+                    const pres = this.presentations.find(p => p.id === this.currentEditId);
+                    if (pres && pres.docId) {
+                        await this.presentationsCollection.doc(pres.docId).update(presData);
+                    }
+                } else {
+                    presData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    await this.presentationsCollection.doc(presData.id).set(presData);
+                }
             }
 
-            this.saveMedia('photo', this.photos);
-            this.renderPhotos();
-
-        } else if (this.currentMediaType === 'video') {
-            const videoData = {
-                id: this.currentEditId || Date.now(),
-                url: document.getElementById('videoUrl').value,
-                title: document.getElementById('videoTitle').value,
-                description: document.getElementById('videoDescription').value
-            };
-
-            if (this.currentEditId) {
-                const index = this.videos.findIndex(v => v.id === this.currentEditId);
-                if (index !== -1) this.videos[index] = videoData;
-            } else {
-                this.videos.push(videoData);
-            }
-
-            this.saveMedia('video', this.videos);
-            this.renderVideos();
-
-        } else if (this.currentMediaType === 'presentation') {
-            const presData = {
-                id: this.currentEditId || Date.now(),
-                url: document.getElementById('presentationUrl').value,
-                title: document.getElementById('presentationTitle').value,
-                description: document.getElementById('presentationDescription').value,
-                date: document.getElementById('presentationDate').value,
-                format: document.getElementById('presentationFormat').value
-            };
-
-            if (this.currentEditId) {
-                const index = this.presentations.findIndex(p => p.id === this.currentEditId);
-                if (index !== -1) this.presentations[index] = presData;
-            } else {
-                this.presentations.push(presData);
-            }
-
-            this.saveMedia('presentation', this.presentations);
-            this.renderPresentations();
+            this.closeModal();
+        } catch (error) {
+            console.error('Error saving media:', error);
+            alert('Failed to save. Please try again.');
         }
-
-        this.closeModal();
     }
 
     // Delete media
-    deleteMedia(id, type) {
+    async deleteMedia(id, type) {
         if (!confirm('Are you sure you want to delete this item?')) return;
 
-        if (type === 'photo') {
-            this.photos = this.photos.filter(p => p.id !== id);
-            this.saveMedia('photo', this.photos);
-            this.renderPhotos();
-        } else if (type === 'video') {
-            this.videos = this.videos.filter(v => v.id !== id);
-            this.saveMedia('video', this.videos);
-            this.renderVideos();
-        } else if (type === 'presentation') {
-            this.presentations = this.presentations.filter(p => p.id !== id);
-            this.saveMedia('presentation', this.presentations);
-            this.renderPresentations();
+        try {
+            if (type === 'photo') {
+                const photo = this.photos.find(p => p.id === id);
+                if (photo && photo.docId) {
+                    await this.photosCollection.doc(photo.docId).delete();
+                }
+            } else if (type === 'video') {
+                const video = this.videos.find(v => v.id === id);
+                if (video && video.docId) {
+                    await this.videosCollection.doc(video.docId).delete();
+                }
+            } else if (type === 'presentation') {
+                const pres = this.presentations.find(p => p.id === id);
+                if (pres && pres.docId) {
+                    await this.presentationsCollection.doc(pres.docId).delete();
+                }
+            }
+        } catch (error) {
+            console.error('Error deleting media:', error);
+            alert('Failed to delete. Please try again.');
         }
     }
 
