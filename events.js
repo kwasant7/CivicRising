@@ -1,10 +1,11 @@
 // Events Management System
-// Uses localStorage to persist events data
+// Uses Firebase Realtime Database to persist events data
 
 class EventsManager {
     constructor() {
-        this.events = this.loadEvents();
+        this.events = [];
         this.currentEditId = null;
+        this.eventsRef = database.ref('events');
         this.init();
     }
 
@@ -30,18 +31,28 @@ class EventsManager {
         });
         this.eventForm.addEventListener('submit', (e) => this.handleSubmit(e));
 
-        // Initial render
-        this.renderEvents();
+        // Load events from Firebase
+        this.loadEvents();
     }
 
-    // Load events from localStorage
+    // Load events from Firebase
     loadEvents() {
-        const stored = localStorage.getItem('civicEvents');
-        if (stored) {
-            return JSON.parse(stored);
-        }
-        // Default sample events
-        return [
+        this.eventsRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                this.events = Object.values(data);
+            } else {
+                // Initialize with default sample events if database is empty
+                this.events = [];
+                this.initializeSampleEvents();
+            }
+            this.renderEvents();
+        });
+    }
+
+    // Initialize sample events (only if database is empty)
+    initializeSampleEvents() {
+        const sampleEvents = [
             {
                 id: Date.now(),
                 title: 'Youth Town Hall Meeting',
@@ -61,11 +72,10 @@ class EventsManager {
                 category: 'Volunteering'
             }
         ];
-    }
 
-    // Save events to localStorage
-    saveEvents() {
-        localStorage.setItem('civicEvents', JSON.stringify(this.events));
+        sampleEvents.forEach(event => {
+            this.eventsRef.child(event.id.toString()).set(event);
+        });
     }
 
     // Render all events
@@ -209,28 +219,29 @@ class EventsManager {
             category: document.getElementById('eventCategory').value
         };
 
-        if (this.currentEditId) {
-            // Update existing event
-            const index = this.events.findIndex(e => e.id === this.currentEditId);
-            if (index !== -1) {
-                this.events[index] = eventData;
-            }
-        } else {
-            // Add new event
-            this.events.push(eventData);
-        }
-
-        this.saveEvents();
-        this.renderEvents();
-        this.closeModal();
+        // Save to Firebase
+        this.eventsRef.child(eventData.id.toString()).set(eventData)
+            .then(() => {
+                console.log('Event saved successfully');
+                this.closeModal();
+            })
+            .catch((error) => {
+                console.error('Error saving event:', error);
+                alert('Failed to save event. Please try again.');
+            });
     }
 
     // Delete event
     deleteEvent(id) {
         if (confirm('Are you sure you want to delete this event?')) {
-            this.events = this.events.filter(e => e.id !== id);
-            this.saveEvents();
-            this.renderEvents();
+            this.eventsRef.child(id.toString()).remove()
+                .then(() => {
+                    console.log('Event deleted successfully');
+                })
+                .catch((error) => {
+                    console.error('Error deleting event:', error);
+                    alert('Failed to delete event. Please try again.');
+                });
         }
     }
 }
