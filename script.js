@@ -152,11 +152,4 @@ document.querySelectorAll('.card, .event-card').forEach(card => {
     });
 });
 
-// Button click effect
-document.querySelectorAll('.btn-primary').forEach(btn => {
-    btn.addEventListener('click', () => {
-        alert('시민 교육 프로그램에 오신 것을 환영합니다! 자세한 정보는 각 섹션을 탐색해주세요.');
-    });
-});
-
 console.log('Civic Education website loaded successfully!');
