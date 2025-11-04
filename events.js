@@ -117,14 +117,14 @@ class EventsManager {
         // Add event listeners to buttons
         document.querySelectorAll('.btn-edit').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const id = parseInt(e.target.dataset.id);
+                const id = e.target.dataset.id;
                 this.openEditModal(id);
             });
         });
 
         document.querySelectorAll('.btn-delete').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const id = parseInt(e.target.dataset.id);
+                const id = e.target.dataset.id;
                 this.deleteEvent(id);
             });
         });
