@@ -1,11 +1,12 @@
 // Events Management System
-// Uses Firebase Realtime Database to persist events data
+// Uses Firebase Firestore to persist events data
 
 class EventsManager {
     constructor() {
         this.events = [];
         this.currentEditId = null;
-        this.eventsRef = database.ref('events');
+        this.eventsCollection = db.collection('events');
+        this.unsubscribe = null;
         this.init();
     }
 
@@ -31,51 +32,68 @@ class EventsManager {
         });
         this.eventForm.addEventListener('submit', (e) => this.handleSubmit(e));
 
-        // Load events from Firebase
+        // Load events from Firestore with real-time updates
         this.loadEvents();
     }
 
-    // Load events from Firebase
+    // Load events from Firestore with real-time listener
     loadEvents() {
-        this.eventsRef.on('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                this.events = Object.values(data);
-            } else {
-                // Initialize with default sample events if database is empty
-                this.events = [];
+        this.unsubscribe = this.eventsCollection.onSnapshot((snapshot) => {
+            if (snapshot.empty) {
+                // Initialize with sample events if collection is empty
                 this.initializeSampleEvents();
+            } else {
+                this.events = [];
+                snapshot.forEach((doc) => {
+                    this.events.push({
+                        docId: doc.id,
+                        ...doc.data()
+                    });
+                });
+                this.renderEvents();
             }
-            this.renderEvents();
+        }, (error) => {
+            console.error('Error loading events:', error);
+            alert('Failed to load events. Please check your Firebase configuration.');
         });
     }
 
-    // Initialize sample events (only if database is empty)
-    initializeSampleEvents() {
+    // Initialize sample events (only if collection is empty)
+    async initializeSampleEvents() {
         const sampleEvents = [
             {
-                id: Date.now(),
+                id: Date.now().toString(),
                 title: 'Youth Town Hall Meeting',
                 date: '2025-11-15',
                 time: '18:00',
                 location: 'City Hall Auditorium',
                 description: 'Join local government leaders to discuss issues affecting young people in our community.',
-                category: 'Advocacy'
+                category: 'Advocacy',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
             },
             {
-                id: Date.now() + 1,
+                id: (Date.now() + 1).toString(),
                 title: 'Environmental Action Day',
                 date: '2025-11-18',
                 time: '09:00',
                 location: 'Central Park',
                 description: 'Join us for a day of environmental action! We\'ll be planting trees and cleaning up litter.',
-                category: 'Volunteering'
+                category: 'Volunteering',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
             }
         ];
 
-        sampleEvents.forEach(event => {
-            this.eventsRef.child(event.id.toString()).set(event);
-        });
+        try {
+            const batch = db.batch();
+            sampleEvents.forEach(event => {
+                const docRef = this.eventsCollection.doc(event.id);
+                batch.set(docRef, event);
+            });
+            await batch.commit();
+            console.log('Sample events initialized');
+        } catch (error) {
+            console.error('Error initializing sample events:', error);
+        }
     }
 
     // Render all events
@@ -201,7 +219,7 @@ class EventsManager {
     }
 
     // Handle form submission
-    handleSubmit(e) {
+    async handleSubmit(e) {
         e.preventDefault();
 
         // Combine hour and minute to create time
@@ -210,38 +228,50 @@ class EventsManager {
         const time = `${hour}:${minute}`;
 
         const eventData = {
-            id: this.currentEditId || Date.now(),
+            id: this.currentEditId || Date.now().toString(),
             title: document.getElementById('eventTitle').value,
             date: document.getElementById('eventDate').value,
             time: time,
             location: document.getElementById('eventLocation').value,
             description: document.getElementById('eventDescription').value,
-            category: document.getElementById('eventCategory').value
+            category: document.getElementById('eventCategory').value,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        // Save to Firebase
-        this.eventsRef.child(eventData.id.toString()).set(eventData)
-            .then(() => {
-                console.log('Event saved successfully');
-                this.closeModal();
-            })
-            .catch((error) => {
-                console.error('Error saving event:', error);
-                alert('Failed to save event. Please try again.');
-            });
+        try {
+            if (this.currentEditId) {
+                // Update existing event
+                const event = this.events.find(e => e.id === this.currentEditId);
+                if (event && event.docId) {
+                    await this.eventsCollection.doc(event.docId).update(eventData);
+                    console.log('Event updated successfully');
+                }
+            } else {
+                // Add new event
+                eventData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                await this.eventsCollection.doc(eventData.id).set(eventData);
+                console.log('Event added successfully');
+            }
+            this.closeModal();
+        } catch (error) {
+            console.error('Error saving event:', error);
+            alert('Failed to save event. Please try again.');
+        }
     }
 
     // Delete event
-    deleteEvent(id) {
+    async deleteEvent(id) {
         if (confirm('Are you sure you want to delete this event?')) {
-            this.eventsRef.child(id.toString()).remove()
-                .then(() => {
+            try {
+                const event = this.events.find(e => e.id === id);
+                if (event && event.docId) {
+                    await this.eventsCollection.doc(event.docId).delete();
                     console.log('Event deleted successfully');
-                })
-                .catch((error) => {
-                    console.error('Error deleting event:', error);
-                    alert('Failed to delete event. Please try again.');
-                });
+                }
+            } catch (error) {
+                console.error('Error deleting event:', error);
+                alert('Failed to delete event. Please try again.');
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 # Firebase Setup Guide for CivicRising Events
 
-This guide will help you set up Firebase Realtime Database for storing event data.
+This guide will help you set up Firebase Firestore for storing event data.
 
 ## Step 1: Create a Firebase Project
 
@@ -31,12 +31,12 @@ const firebaseConfig = {
 };
 ```
 
-## Step 3: Enable Realtime Database
+## Step 3: Enable Firestore Database
 
-1. In the Firebase Console, go to **Build** > **Realtime Database**
-2. Click "Create Database"
-3. Choose a location (e.g., United States)
-4. Start in **Test mode** for development (you can change security rules later)
+1. In the Firebase Console, go to **Build** > **Firestore Database**
+2. Click "Create database"
+3. Choose **Start in test mode** for development (you can change security rules later)
+4. Select a Firestore location (e.g., `us-central` or closest to your users)
 5. Click "Enable"
 
 ## Step 4: Update Your Configuration File
@@ -48,7 +48,6 @@ const firebaseConfig = {
 const firebaseConfig = {
     apiKey: "YOUR_ACTUAL_API_KEY",
     authDomain: "your-project.firebaseapp.com",
-    databaseURL: "https://your-project-default-rtdb.firebaseio.com",
     projectId: "your-project-id",
     storageBucket: "your-project.appspot.com",
     messagingSenderId: "YOUR_SENDER_ID",
@@ -56,44 +55,48 @@ const firebaseConfig = {
 };
 ```
 
+**Note:** You don't need `databaseURL` for Firestore (only needed for Realtime Database).
+
 ## Step 5: Configure Security Rules (Important!)
 
-For development/testing, the database starts in test mode with open access. For production, update the rules:
+For development/testing, Firestore starts in test mode with open access. For production, update the rules:
 
-1. Go to **Realtime Database** > **Rules** tab
+1. Go to **Firestore Database** > **Rules** tab
 2. Replace with these rules for basic security:
 
-```json
-{
-  "rules": {
-    "events": {
-      ".read": true,
-      ".write": true
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if true;
     }
   }
 }
 ```
 
 For better security (recommended for production):
-```json
-{
-  "rules": {
-    "events": {
-      ".read": true,
-      ".write": "auth != null"
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if request.auth != null;
     }
   }
 }
 ```
 
-This allows anyone to read events but only authenticated users to write.
+This allows anyone to read events but only authenticated users to create/update/delete events.
 
 ## Step 6: Test Your Setup
 
 1. Open `community-events.html` in a browser
 2. Try adding a new event
-3. Check Firebase Console > Realtime Database to see if the data appears
-4. The data should be stored under the `events` node
+3. Check Firebase Console > Firestore Database to see if the data appears
+4. The data should be stored in the `events` collection
 
 ## Step 7: Deploy to GitHub Pages
 
@@ -113,43 +116,57 @@ git push
 - Check the browser console for errors
 
 ### Error: "Permission denied"
-- Check your Realtime Database security rules
+- Check your Firestore Database security rules
 - Make sure the rules allow read/write access
 
 ### Events not syncing
 - Check your internet connection
-- Verify the `databaseURL` in `firebase-config.js` is correct
+- Verify the `projectId` in `firebase-config.js` is correct
 - Open browser developer tools and check the Console for errors
 
 ## Data Structure
 
-Events are stored in Firebase with this structure:
+Events are stored in Firestore with this structure:
 ```
-events/
-  ├── 1234567890/
-  │   ├── id: 1234567890
+events (collection)
+  ├── 1234567890 (document)
+  │   ├── id: "1234567890"
   │   ├── title: "Event Title"
   │   ├── date: "2025-11-15"
   │   ├── time: "18:00"
   │   ├── location: "Location Name"
   │   ├── description: "Event description"
-  │   └── category: "Advocacy"
-  └── 1234567891/
+  │   ├── category: "Advocacy"
+  │   ├── createdAt: Timestamp
+  │   └── updatedAt: Timestamp
+  └── 1234567891 (document)
       └── ...
 ```
 
-## Benefits of Firebase
+## Benefits of Firebase Firestore
 
-- **Real-time sync**: Events update instantly across all devices
+- **Real-time sync**: Events update instantly across all devices with onSnapshot listeners
 - **No server needed**: Firebase handles all backend infrastructure
-- **Free tier**: Generous free usage limits for small projects
+- **Free tier**: Generous free usage limits (50K reads/day, 20K writes/day)
 - **Reliable**: Google's infrastructure ensures 99.95% uptime
-- **Scalable**: Grows with your application
+- **Scalable**: Automatically scales from zero to millions of users
+- **Offline support**: Works offline and syncs when connection is restored
+- **Advanced queries**: Supports compound queries and indexes
+
+## Firestore vs Realtime Database
+
+This project uses **Firestore** (not Realtime Database) because:
+- Better scalability and performance
+- More powerful querying capabilities
+- Better structured data with collections and documents
+- Automatic indexing
+- Better pricing for most use cases
 
 ## Next Steps
 
 Consider adding:
-- User authentication (Firebase Auth)
-- Image uploads (Firebase Storage)
+- User authentication (Firebase Auth) to secure write operations
+- Image uploads (Firebase Storage) for event photos
 - Event notifications (Firebase Cloud Messaging)
-- Analytics (Firebase Analytics)
+- Analytics (Firebase Analytics) to track event views
+- Event registration with user tracking
