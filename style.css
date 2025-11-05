@@ -297,16 +297,9 @@ body {
 /* Card Grid */
 .card-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 1.5rem;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
     margin-top: 2.5rem;
-}
-
-/* Responsive card grid for tablets */
-@media (max-width: 1024px) {
-    .card-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
 }
 
 .card {
