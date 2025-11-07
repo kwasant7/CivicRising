@@ -4,9 +4,19 @@
 class EventsManager {
     constructor() {
         this.events = [];
+        this.filteredEvents = [];
         this.currentEditId = null;
         this.eventsCollection = db.collection('events');
         this.unsubscribe = null;
+
+        // Filter state
+        this.filters = {
+            search: '',
+            category: 'all',
+            date: 'all',
+            sort: 'date-desc'
+        };
+
         this.init();
     }
 
@@ -17,6 +27,14 @@ class EventsManager {
         this.modal = document.getElementById('eventModal');
         this.eventForm = document.getElementById('eventForm');
         this.modalTitle = document.getElementById('modalTitle');
+
+        // Filter elements
+        this.searchInput = document.getElementById('searchInput');
+        this.categoryFilter = document.getElementById('categoryFilter');
+        this.dateFilter = document.getElementById('dateFilter');
+        this.sortBy = document.getElementById('sortBy');
+        this.clearFiltersBtn = document.getElementById('clearFilters');
+        this.eventCount = document.getElementById('eventCount');
 
         // Buttons
         this.addEventBtn = document.getElementById('addEventBtn');
@@ -31,6 +49,13 @@ class EventsManager {
             if (e.target === this.modal) this.closeModal();
         });
         this.eventForm.addEventListener('submit', (e) => this.handleSubmit(e));
+
+        // Filter event listeners
+        this.searchInput.addEventListener('input', () => this.handleFilterChange());
+        this.categoryFilter.addEventListener('change', () => this.handleFilterChange());
+        this.dateFilter.addEventListener('change', () => this.handleFilterChange());
+        this.sortBy.addEventListener('change', () => this.handleFilterChange());
+        this.clearFiltersBtn.addEventListener('click', () => this.clearFilters());
 
         // Load events from Firestore with real-time updates
         this.loadEvents();
@@ -96,23 +121,109 @@ class EventsManager {
         }
     }
 
+    // Handle filter changes
+    handleFilterChange() {
+        this.filters.search = this.searchInput.value.toLowerCase();
+        this.filters.category = this.categoryFilter.value;
+        this.filters.date = this.dateFilter.value;
+        this.filters.sort = this.sortBy.value;
+        this.applyFilters();
+    }
+
+    // Clear all filters
+    clearFilters() {
+        this.searchInput.value = '';
+        this.categoryFilter.value = 'all';
+        this.dateFilter.value = 'all';
+        this.sortBy.value = 'date-desc';
+        this.handleFilterChange();
+    }
+
+    // Apply filters and render
+    applyFilters() {
+        let filtered = [...this.events];
+
+        // Apply search filter
+        if (this.filters.search) {
+            filtered = filtered.filter(event => {
+                const searchText = this.filters.search;
+                return event.title.toLowerCase().includes(searchText) ||
+                       event.description.toLowerCase().includes(searchText) ||
+                       event.location.toLowerCase().includes(searchText);
+            });
+        }
+
+        // Apply category filter
+        if (this.filters.category !== 'all') {
+            filtered = filtered.filter(event => event.category === this.filters.category);
+        }
+
+        // Apply date filter
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (this.filters.date === 'upcoming') {
+            filtered = filtered.filter(event => new Date(event.date) >= today);
+        } else if (this.filters.date === 'past') {
+            filtered = filtered.filter(event => new Date(event.date) < today);
+        }
+
+        // Apply sorting
+        filtered = this.sortEvents(filtered, this.filters.sort);
+
+        this.filteredEvents = filtered;
+        this.renderEvents();
+    }
+
+    // Sort events based on criteria
+    sortEvents(events, sortBy) {
+        const sorted = [...events];
+
+        switch (sortBy) {
+            case 'date-desc':
+                return sorted.sort((a, b) => new Date(b.date) - new Date(a.date));
+            case 'date-asc':
+                return sorted.sort((a, b) => new Date(a.date) - new Date(b.date));
+            case 'title-asc':
+                return sorted.sort((a, b) => a.title.localeCompare(b.title));
+            case 'title-desc':
+                return sorted.sort((a, b) => b.title.localeCompare(a.title));
+            default:
+                return sorted;
+        }
+    }
+
     // Render all events
     renderEvents() {
-        if (this.events.length === 0) {
+        const eventsToRender = this.filteredEvents.length > 0 || this.filters.search ||
+                               this.filters.category !== 'all' || this.filters.date !== 'all'
+                               ? this.filteredEvents : this.events;
+
+        // Update count
+        this.eventCount.textContent = eventsToRender.length;
+
+        if (eventsToRender.length === 0) {
             this.eventsBoard.style.display = 'none';
             this.emptyState.style.display = 'block';
+
+            // Update empty state message based on filters
+            const emptyTitle = document.getElementById('emptyStateTitle');
+            const emptyMessage = document.getElementById('emptyStateMessage');
+
+            if (this.events.length === 0) {
+                emptyTitle.textContent = 'No Events Yet';
+                emptyMessage.textContent = 'Click "Add New Event" to create your first event!';
+            } else {
+                emptyTitle.textContent = 'No Events Found';
+                emptyMessage.textContent = 'Try adjusting your filters or search terms.';
+            }
             return;
         }
 
         this.eventsBoard.style.display = 'flex';
         this.emptyState.style.display = 'none';
 
-        // Sort events by date (newest first)
-        const sortedEvents = [...this.events].sort((a, b) => {
-            return new Date(b.date) - new Date(a.date);
-        });
-
-        this.eventsBoard.innerHTML = sortedEvents.map(event => this.createEventHTML(event)).join('');
+        this.eventsBoard.innerHTML = eventsToRender.map(event => this.createEventHTML(event)).join('');
 
         // Add event listeners to buttons
         document.querySelectorAll('.btn-edit').forEach(btn => {
@@ -141,23 +252,52 @@ class EventsManager {
 
         const formattedTime = this.formatTime(event.time);
 
+        // Determine if event is past
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const isPast = eventDate < today;
+        const pastClass = isPast ? 'event-past' : '';
+
+        // Get category color
+        const categoryColors = {
+            'Community': '#667eea',
+            'Education': '#f59e0b',
+            'Advocacy': '#ef4444',
+            'Volunteering': '#10b981',
+            'Workshop': '#8b5cf6',
+            'Social': '#ec4899'
+        };
+        const categoryColor = categoryColors[event.category] || '#667eea';
+
         return `
-            <div class="event-item">
+            <div class="event-item ${pastClass}">
+                <div class="event-date-badge" style="background: ${categoryColor}">
+                    <div class="date-day">${eventDate.getDate()}</div>
+                    <div class="date-month">${eventDate.toLocaleDateString('en-US', { month: 'short' })}</div>
+                </div>
                 <div class="event-content">
                     <div class="event-header-row">
                         <h3>${this.escapeHtml(event.title)}</h3>
-                        <span class="event-category">${event.category}</span>
+                        <span class="event-category" style="background: ${categoryColor}20; color: ${categoryColor}; border-color: ${categoryColor}">
+                            ${event.category}
+                        </span>
                     </div>
                     <div class="event-info">
-                        <span class="event-info-item">📅 ${formattedDate}</span>
-                        <span class="event-info-item">⏰ ${formattedTime}</span>
-                        <span class="event-info-item">📍 ${this.escapeHtml(event.location)}</span>
+                        <span class="event-info-item">
+                            <span class="info-icon">⏰</span>
+                            <span>${formattedTime}</span>
+                        </span>
+                        <span class="event-info-item">
+                            <span class="info-icon">📍</span>
+                            <span>${this.escapeHtml(event.location)}</span>
+                        </span>
                     </div>
                     <p class="event-description">${this.escapeHtml(event.description)}</p>
+                    ${isPast ? '<div class="event-past-label">Past Event</div>' : ''}
                 </div>
                 <div class="event-actions">
-                    <button class="btn-edit" data-id="${event.id}">Edit</button>
-                    <button class="btn-delete" data-id="${event.id}">Delete</button>
+                    <button class="btn-edit" data-id="${event.id}" title="Edit Event">✏️</button>
+                    <button class="btn-delete" data-id="${event.id}" title="Delete Event">🗑️</button>
                 </div>
             </div>
         `;

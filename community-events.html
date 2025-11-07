@@ -48,6 +48,54 @@
                 <button class="btn-add-event" id="addEventBtn">+ Add New Event</button>
             </div>
 
+            <!-- Filter & Search Controls -->
+            <div class="events-controls">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search events by title, location, or description..." class="search-input">
+                    <span class="search-icon">🔍</span>
+                </div>
+
+                <div class="filter-controls">
+                    <div class="filter-group">
+                        <label for="categoryFilter">Category:</label>
+                        <select id="categoryFilter" class="filter-select">
+                            <option value="all">All Categories</option>
+                            <option value="Community">Community</option>
+                            <option value="Education">Education</option>
+                            <option value="Advocacy">Advocacy</option>
+                            <option value="Volunteering">Volunteering</option>
+                            <option value="Workshop">Workshop</option>
+                            <option value="Social">Social</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="dateFilter">Date:</label>
+                        <select id="dateFilter" class="filter-select">
+                            <option value="all">All Events</option>
+                            <option value="upcoming">Upcoming</option>
+                            <option value="past">Past</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="sortBy">Sort By:</label>
+                        <select id="sortBy" class="filter-select">
+                            <option value="date-desc">Newest First</option>
+                            <option value="date-asc">Oldest First</option>
+                            <option value="title-asc">Title (A-Z)</option>
+                            <option value="title-desc">Title (Z-A)</option>
+                        </select>
+                    </div>
+
+                    <button id="clearFilters" class="btn-clear-filters">Clear Filters</button>
+                </div>
+
+                <div class="results-count" id="resultsCount">
+                    Showing <span id="eventCount">0</span> event(s)
+                </div>
+            </div>
+
             <!-- Events List -->
             <div class="events-board" id="eventsBoard">
                 <!-- Events will be dynamically loaded here -->
@@ -56,8 +104,8 @@
             <!-- Empty State -->
             <div class="empty-state" id="emptyState" style="display: none;">
                 <div class="empty-icon">📅</div>
-                <h3>No Events Yet</h3>
-                <p>Click "Add New Event" to create your first event!</p>
+                <h3 id="emptyStateTitle">No Events Yet</h3>
+                <p id="emptyStateMessage">Click "Add New Event" to create your first event!</p>
             </div>
         </div>
     </section>
